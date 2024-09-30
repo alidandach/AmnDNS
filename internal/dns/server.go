@@ -14,9 +14,8 @@ type Server struct {
 	addr            string
 	blocklist       map[string]struct{}
 	upstreamServers []string
+	cache           *DNSCache
 }
-
-const seedValue = 1 // Constant for seed value if needed
 
 // NewServer creates a new DNS server instance
 func NewServer() *Server {
@@ -28,8 +27,9 @@ func NewServer() *Server {
 
 	return &Server{
 		addr:            addr,
-		blocklist:       loadBlocklist(),       // Load blocklist from a separate config file
-		upstreamServers: loadUpstreamServers(), // Load upstream servers from separate config file
+		blocklist:       loadBlocklist(),               // Load blocklist from a separate config file
+		upstreamServers: loadUpstreamServers(),         // Load upstream servers from separate config file
+		cache:           NewDNSCache(10 * time.Minute), // Initialize cache with 10-minute TTL
 	}
 }
 
@@ -46,6 +46,13 @@ func (s *Server) Start() error {
 func (s *Server) handleDNSRequest(w dns.ResponseWriter, r *dns.Msg) {
 	domain := strings.ToLower(r.Question[0].Name)
 
+	// Check if the domain is in the cache and update the ID to match the current query
+	if msg, found := s.cache.Get(domain, r.Id); found {
+		log.Printf("Cache hit for %s", domain)
+		_ = w.WriteMsg(msg)
+		return
+	}
+
 	// Check if the domain is in the blocklist
 	if s.isBlocked(domain) {
 		s.returnNegativeResponse(w, r)
@@ -60,6 +67,9 @@ func (s *Server) handleDNSRequest(w dns.ResponseWriter, r *dns.Msg) {
 		s.returnNegativeResponse(w, r)
 		return
 	}
+
+	// Cache the result
+	s.cache.Set(domain, m)
 
 	_ = w.WriteMsg(m)
 }
