@@ -1,0 +1,4 @@
+upstream_servers:
+  - "8.8.8.8:53"     # Google DNS
+  - "1.1.1.1:53"     # Cloudflare DNS
+  - "9.9.9.9:53"     # Quad9 DNS
