@@ -31,17 +31,20 @@ func NewDNSCache(ttl time.Duration) *DNSCache {
 // Also updates the ID field of the cached response to match the incoming request
 func (c *DNSCache) Get(domain string, queryID uint16) (*dns.Msg, bool) {
 	c.mu.RLock()
-	defer c.mu.RUnlock()
-
 	entry, found := c.data[domain]
+	c.mu.RUnlock() // Release the read lock immediately
+
+	// If not found or expired, handle it in a write lock
 	if !found || time.Now().After(entry.Expiration) {
 		if found {
-			delete(c.data, domain) // Remove expired entry
+			c.mu.Lock()
+			delete(c.data, domain)
+			c.mu.Unlock()
 		}
 		return nil, false
 	}
 
-	// Make a copy of the cached response and update the ID field to match the current query ID
+	// Make a copy of the cached response and update the ID field
 	cachedMsg := entry.Msg.Copy()
 	cachedMsg.Id = queryID
 	return cachedMsg, true
